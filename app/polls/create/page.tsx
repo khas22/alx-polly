@@ -1,46 +1,92 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import Link from 'next/link';
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
+import { useRouter } from 'next/navigation'
 
 export default function CreatePollPage() {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [options, setOptions] = useState(['', '']);
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [options, setOptions] = useState(['', ''])
+  const { user } = useAuth()
+  const router = useRouter()
 
   const handleOptionChange = (index: number, value: string) => {
-    const newOptions = [...options];
-    newOptions[index] = value;
-    setOptions(newOptions);
-  };
+    const newOptions = [...options]
+    newOptions[index] = value
+    setOptions(newOptions)
+  }
 
   const addOption = () => {
-    setOptions([...options, '']);
-  };
+    setOptions([...options, ''])
+  }
 
   const removeOption = (index: number) => {
-    if (options.length <= 2) return; // Minimum 2 options required
-    const newOptions = options.filter((_, i) => i !== index);
-    setOptions(newOptions);
-  };
+    if (options.length <= 2) return // Minimum 2 options required
+    const newOptions = options.filter((_, i) => i !== index)
+    setOptions(newOptions)
+  }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // This is a placeholder for the actual poll creation logic
-    const pollData = {
-      title,
-      description,
-      options: options.filter(option => option.trim() !== ''),
-    };
-    console.log('Creating poll with data:', pollData);
-    // Redirect to polls page after creation (in a real app)
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) {
+      alert('You must be logged in to create a poll.')
+      return
+    }
+
+    // 1. Insert the poll
+    const { data: pollData, error: pollError } = await supabase
+      .from('polls')
+      .insert({
+        question: title,
+        description: description,
+        created_by: user.id,
+      })
+      .select()
+      .single()
+
+    if (pollError) {
+      console.error('Error creating poll:', pollError)
+      return
+    }
+
+    // 2. Insert the options
+    const filteredOptions = options.filter((option) => option.trim() !== '')
+    const { error: optionsError } = await supabase.from('options').insert(
+      filteredOptions.map((option) => ({
+        text: option,
+        poll_id: pollData.id,
+      }))
+    )
+
+    if (optionsError) {
+      console.error('Error adding options:', optionsError)
+      // Optionally, delete the poll that was just created
+      await supabase.from('polls').delete().match({ id: pollData.id })
+      return
+    }
+
+    console.log('Poll created successfully!')
+    router.push(`/polls/${pollData.id}`)
+  }
 
   return (
     <div className="container mx-auto py-10">
-      <Link href="/polls" className="text-primary hover:underline mb-6 inline-block">
+      <Link
+        href="/polls"
+        className="text-primary hover:underline mb-6 inline-block"
+      >
         ← Back to all polls
       </Link>
 
@@ -85,7 +131,12 @@ export default function CreatePollPage() {
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium">Poll Options</label>
-                <Button type="button" onClick={addOption} variant="outline" size="sm">
+                <Button
+                  type="button"
+                  onClick={addOption}
+                  variant="outline"
+                  size="sm"
+                >
                   Add Option
                 </Button>
               </div>
@@ -125,5 +176,5 @@ export default function CreatePollPage() {
         </form>
       </Card>
     </div>
-  );
+  )
 }
